@@ -34,23 +34,20 @@ bid modify (Node socket' bid') = (\new -> Node socket' new) <$> modify bid'
 
 initialization :: PortNumber -> IO Node
 initialization portnum = do
-    s <- Socket.socket AF_INET Stream Socket.defaultProtocol
+    s <- Socket.socket AF_INET Datagram Socket.defaultProtocol
     Socket.bind s $ SockAddrInet portnum 0x0100007f
-    Socket.listen s Socket.sOMAXCONN
     pure $ Node s Bid.start
 
 receiving :: StateT Node IO ()
-receiving = forever $ get >>= \node -> do
-    (from_socket, _) <- lift $ Socket.accept $ node ^. socket
-    bytes <- lift $ Socket.recv from_socket 4096
+receiving = get >>= \node -> forever $ do
+    lift $ Socket.listen (node ^. socket) Socket.sOMAXCONN
+    (from, _) <- lift $ Socket.accept $ node ^. socket
+    bytes <- lift $ Socket.recv from 4096
     case Bid.decode bytes of
-        Right newbid -> do
-            lift $ print newbid
-            if newbid <= (node ^. bid) then pure ()
-            else put $ node & bid .~ merge newbid (node ^. bid)
         Left err -> lift $ print err
+        Right newbid -> if newbid <= (node ^. bid) then pure ()
+            else put $ node & bid .~ merge newbid (node ^. bid)
 
--- notify nodes about new bid
 broadcasting :: Traversable t => Node -> t Node -> IO ()
 broadcasting (Node socket' bid') nodes = void $ traverse sending nodes where
 
