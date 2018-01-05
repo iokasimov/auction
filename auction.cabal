@@ -10,13 +10,13 @@ extra-source-files: README.md
 cabal-version: >=1.10
 
 library
-  build-depends: base, bytestring, lens, transformers, crdt, network, async, cereal
+  build-depends: base, bytestring, lens, transformers, crdt, network, network-simple, async, cereal, errors
   exposed-modules: Node, Bid
   default-extensions: OverloadedStrings, TypeSynonymInstances
   default-language: Haskell2010
 
 executable auction
   main-is: Main.hs
-  build-depends: base, bytestring, lens, transformers, crdt, network, async, cereal
+  build-depends: base, bytestring, lens, transformers, crdt, network, network-simple, async, cereal, errors
   default-extensions: OverloadedStrings, TypeSynonymInstances
   default-language: Haskell2010

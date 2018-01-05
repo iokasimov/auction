@@ -1,4 +1,4 @@
-module Bid (Bid (..), start, Bid.decode, Bid.encode) where
+module Bid (Bid (..), start, Bid.decode, Bid.encode, Bid.getMax) where
 
 import Data.ByteString
 import Data.Semilattice
@@ -20,3 +20,6 @@ decode = Data.Serialize.decode
 
 encode :: Bid -> ByteString
 encode = Data.Serialize.encode
+
+getMax :: Max Integer -> Integer
+getMax = Max.getMax

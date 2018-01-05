@@ -1,16 +1,16 @@
-import Control.Lens
 import Control.Monad (void)
-import Control.Concurrent (threadDelay, forkIO)
 import Control.Concurrent.Async (async)
-import Control.Monad.Trans.State.Strict
+import Control.Monad.Trans.State.Strict (execStateT)
+import Control.Monad.Trans.Cont (runContT)
+import Network.Simple.TCP as TCP
 
 import qualified Node
+import qualified Bid
 
 main = do
-    client1 <- Node.initialization 8081
-    client2 <- Node.initialization 8082
-    client3 <- Node.initialization 8083
-    client4 <- Node.initialization 8084
-    client5 <- Node.initialization 8085
-    -- just wait 10 seconds
-    threadDelay 10000000
+
+    async $ runContT (Node.run 8081) $ \args ->
+        void $ execStateT (Node.receiving args) $ (+1000) <$> Bid.start
+
+    TCP.connect "127.0.0.1" "8081" $ \(socket, address) -> do
+        TCP.send socket $ Bid.encode $ (+1001) <$> Bid.start

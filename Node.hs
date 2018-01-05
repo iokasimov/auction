@@ -1,4 +1,4 @@
-module Node (Node (..), socket, bid, initialization, receiving, broadcasting) where
+module Node (run, receiving) where
 
 import Data.Monoid
 import Data.Either
@@ -8,52 +8,27 @@ import Control.Monad.Trans.Class
 import Control.Concurrent.Async (async)
 import Control.Monad (forever, sequence_, void)
 import Control.Monad.Trans.State.Strict
-import Network.Socket (Family (..), PortNumber,
-    SockAddr (..), Socket (..), SocketType (..))
-import qualified Network.Socket as Socket hiding (recv, send)
-import qualified Network.Socket.ByteString as Socket
+import Control.Monad.Trans.Cont
+import Control.Error.Util (hush)
+import Network.Simple.TCP as TCP
 
 import Bid (Bid (..))
 import qualified Bid
 
---------------------------------------------------------------------------------
+type Port = Int
 
-data Node = Node Socket Bid
+run :: Port -> ContT () IO (TCP.Socket, TCP.SockAddr)
+run port = ContT $ \handle -> TCP.serve
+    (TCP.Host "127.0.0.1") (show port) handle
 
-instance Show Node where
-    show (Node socket' bid') = "[#] Node: " <>
-        (show socket') <> ", " <> (show bid')
-
-socket :: Lens Node Node Socket Socket
-socket modify (Node socket' bid') = (\new -> Node new bid') <$> modify socket'
-
-bid :: Lens Node Node Bid Bid
-bid modify (Node socket' bid') = (\new -> Node socket' new) <$> modify bid'
-
---------------------------------------------------------------------------------
-
-initialization :: PortNumber -> IO Node
-initialization portnum = do
-    s <- Socket.socket AF_INET Datagram Socket.defaultProtocol
-    Socket.bind s $ SockAddrInet portnum 0x0100007f
-    pure $ Node s Bid.start
-
-receiving :: StateT Node IO ()
-receiving = get >>= \node -> forever $ do
-    lift $ Socket.listen (node ^. socket) Socket.sOMAXCONN
-    (from, _) <- lift $ Socket.accept $ node ^. socket
-    bytes <- lift $ Socket.recv from 4096
-    case Bid.decode bytes of
-        Left err -> lift $ print err
-        Right newbid -> if newbid <= (node ^. bid) then pure ()
-            else put $ node & bid .~ merge newbid (node ^. bid)
-
-broadcasting :: Traversable t => Node -> t Node -> IO ()
-broadcasting (Node socket' bid') nodes = void $ traverse sending nodes where
-
-    sending :: Node -> IO ()
-    sending node = do
-        port <- Socket.socketPort $ node ^. socket
-        let address = Socket.SockAddrInet port 0x0100007f
-        Socket.connect (node ^. socket) address
-        void $ Socket.send (node ^. socket) $ Bid.encode (node ^. bid)
+receiving :: (TCP.Socket, TCP.SockAddr) -> StateT Bid IO ()
+receiving (socket, address) = get >>= \oldbid -> do
+    lift $ print $ "OLD: " <> (show $ Bid.getMax oldbid)
+    received <- lift $ TCP.recv socket 1024
+    case received of
+        Nothing -> lift $ print "got nothing..."
+        Just bytes -> case Bid.decode bytes of
+            Left err -> lift $ print err
+            Right newbid -> do
+                put $ newbid `merge` oldbid
+                get >>= lift . print . mappend "NEW: " . show . Bid.getMax
